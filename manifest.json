@@ -1,0 +1,17 @@
+{
+  "short_name": "3D Player",
+  "name": "3D Neumorphic Media Player",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/fluent/512/000000/audio-wave.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "./index.html",
+  "background_color": "#1a1c20",
+  "theme-color": "#1e2024",
+  "display": "standalone",
+  "orientation": "portrait"
+}
