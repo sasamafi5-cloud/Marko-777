@@ -13,11 +13,30 @@
     <link rel="apple-touch-icon" href="https://img.icons8.com/fluent/512/000000/audio-wave.png">
 
     <script>
+        // Pokretanje Service Worker-a
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('./sw.js')
                     .then(reg => console.log('PWA Spreman!', reg))
                     .catch(err => console.log('Greška sa PWA', err));
+            });
+        }
+
+        // AKTIVACIJA PERSISTENT STORAGE-A (ZAŠTITA OD BRISANJA PODATAKA)
+        if (navigator.storage && navigator.storage.persist) {
+            navigator.storage.persisted().then((persisted) => {
+                if (!persisted) {
+                    console.log("Zatražujem trajnu memoriju od operativnog sistema...");
+                    navigator.storage.persist().then((granted) => {
+                        if (granted) {
+                            console.log("Sjajno! Operativni sistem je odobrio trajno čuvanje podataka. Podaci su bezbedni!");
+                        } else {
+                            console.log("Sistem je odbio automatsko zaključavanje memorije. (Na nekim telefonima je potrebno prvo dodati aplikaciju na Home Screen).");
+                        }
+                    });
+                } else {
+                    console.log("Podaci su već osigurani i zaključani od brisanja.");
+                }
             });
         }
     </script>
