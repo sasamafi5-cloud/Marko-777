@@ -1,0 +1,751 @@
+<!DOCTYPE html>
+<html lang="sr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>3D Neumorphic Media Player</title>
+    
+    <meta name="theme-color" content="#1e2024">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    
+    <link rel="manifest" href="./manifest.json">
+    <link rel="apple-touch-icon" href="https://img.icons8.com/fluent/512/000000/audio-wave.png">
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(reg => console.log('PWA Spreman!', reg))
+                    .catch(err => console.log('Greška sa PWA', err));
+            });
+        }
+    </script>
+    
+    <style>
+        :root {
+            --bg-color: #1a1c20;
+            --surface-color: #1e2024;
+            --font-color: #a0a5b5;
+            --font-light: #626875;
+            
+            --accent-color: #ff2a2a;
+            --accent-blur: rgba(255, 42, 42, 0.35);
+            --button-glow-opacity: 0.4;
+            
+            --shadow-blur: 16px;
+            --shadow-size: 9px;
+            --shadow-dark-opacity: 1.0;
+            --shadow-light-opacity: 0.15;
+            
+            --card-radius: 40px;
+            --ambilight-size: 20%;
+            --shadow-inset-intensity: 3px;
+            
+            --outer-shadow: calc(var(--shadow-size) * 1) calc(var(--shadow-size) * 1) var(--shadow-blur) rgba(10, 11, 13, var(--shadow-dark-opacity)), 
+                            calc(var(--shadow-size) * -1) calc(var(--shadow-size) * -1) var(--shadow-blur) rgba(45, 49, 56, var(--shadow-light-opacity));
+            
+            --inner-shadow: inset var(--shadow-inset-intensity) var(--shadow-inset-intensity) 7px rgba(10, 11, 13, 0.85), 
+                            inset calc(var(--shadow-inset-intensity) * -1) calc(var(--shadow-inset-intensity) * -1) 7px rgba(45, 49, 56, 0.2);
+            
+            --button-shadow: 6px 6px 12px rgba(10, 11, 13, 0.9), -4px -4px 10px rgba(45, 49, 56, 0.3);
+            --button-active: inset 4px 4px 8px #0b0c0e, inset -4px -4px 8px #2d3138;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--font-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 10px;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        body::before {
+            content: '';
+            position: absolute;
+            bottom: -50px; left: -50px;
+            width: 250px; height: 250px;
+            background: radial-gradient(circle, var(--accent-blur) 0%, transparent 70%);
+            z-index: 0;
+            pointer-events: none;
+            opacity: 0.7;
+        }
+
+        .app-container {
+            display: flex;
+            gap: 25px;
+            max-width: 760px;
+            width: 100%;
+            justify-content: center;
+            flex-wrap: wrap;
+            position: relative;
+            z-index: 1;
+        }
+
+        .player-card {
+            background: var(--surface-color);
+            border-radius: var(--card-radius);
+            padding: 25px;
+            width: 360px;
+            height: 640px;
+            box-shadow: var(--outer-shadow);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .album-art-wrapper::after {
+            content: '';
+            position: absolute;
+            top: calc(var(--ambilight-size) * -1); 
+            left: calc(var(--ambilight-size) * -1); 
+            right: calc(var(--ambilight-size) * -1); 
+            bottom: calc(var(--ambilight-size) * -1);
+            background: radial-gradient(circle, var(--accent-blur) 0%, transparent 75%);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.4s ease;
+            pointer-events: none;
+        }
+
+        .ambient-on .album-art-wrapper.playing-glow::after {
+            opacity: 1;
+            animation: pulseGlow 2.5s infinite alternate ease-in-out;
+        }
+
+        @keyframes pulseGlow {
+            0% { transform: scale(0.95); opacity: 0.5; }
+            100% { transform: scale(1.05); opacity: 1; }
+        }
+
+        .header-nav {
+            display: flex;
+            width: 100%;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 25px;
+        }
+
+        .nav-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--surface-color);
+            border: none;
+            box-shadow: var(--button-shadow);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            color: var(--font-color);
+            transition: background 0.2s, box-shadow 0.2s;
+        }
+        .nav-btn:active { box-shadow: var(--button-active); }
+
+        .header-title {
+            font-size: 11px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            color: var(--font-light);
+            font-weight: bold;
+        }
+
+        .album-art-wrapper {
+            width: 210px;
+            height: 210px;
+            border-radius: 50%;
+            background: var(--surface-color);
+            box-shadow: var(--outer-shadow);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-bottom: 25px;
+            padding: 12px;
+            cursor: pointer;
+            transition: transform 0.15s ease;
+        }
+        .album-art-wrapper:active { transform: scale(0.96); }
+
+        .album-art {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: #111215;
+            box-shadow: var(--inner-shadow);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .album-video {
+            width: 100%; height: 100%;
+            object-fit: cover;
+            border-radius: 50%;
+            display: none;
+        }
+
+        .album-art-fallback {
+            width: 100%; height: 100%;
+            background: radial-gradient(circle, #22252a 0%, #121316 80%);
+            display: flex; justify-content: center; align-items: center;
+        }
+
+        .track-info { text-align: center; margin-bottom: 25px; width: 100%; }
+        .track-title { font-size: 20px; font-weight: 600; color: #e2e8f0; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding: 0 10px; }
+        .track-artist { font-size: 13px; color: var(--font-light); }
+
+        .progress-container { width: 100%; margin-bottom: 30px; }
+        .time-stamps { display: flex; justify-content: space-between; font-size: 11px; color: var(--font-light); margin-bottom: 10px; }
+        .slider-wrapper { width: 100%; height: 8px; background: #111215; border-radius: 10px; box-shadow: var(--inner-shadow); cursor: pointer; position: relative; }
+        .progress-bar { height: 100%; width: 0%; border-radius: 10px; background: var(--accent-color); position: relative; box-shadow: 0 0 8px var(--accent-blur); }
+        .progress-handle { width: 16px; height: 16px; border-radius: 50%; background: var(--surface-color); box-shadow: var(--button-shadow); position: absolute; right: -8px; top: 50%; transform: translateY(-50%); }
+
+        .controls { display: flex; width: 100%; justify-content: space-between; align-items: center; padding: 0 15px; margin-top: auto; }
+        .control-btn { width: 55px; height: 55px; border-radius: 50%; background: var(--surface-color); border: none; box-shadow: var(--button-shadow); display: flex; justify-content: center; align-items: center; color: var(--font-color); cursor: pointer; }
+        .control-btn:active { box-shadow: var(--button-active); }
+        
+        .control-btn.play-main { 
+            width: 70px; 
+            height: 70px; 
+            background: var(--accent-color); 
+            color: white; 
+            box-shadow: 0px 4px 15px rgba(255, 42, 42, var(--button-glow-opacity)); 
+        }
+
+        .video-overlay-panel {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--surface-color);
+            z-index: 10;
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            transform: translateY(-100%);
+            transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        .video-overlay-panel.open { transform: translateY(0); }
+
+        .video-controls-box {
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            margin-top: 15px;
+            background: #111215;
+            padding: 12px;
+            border-radius: 20px;
+            box-shadow: var(--inner-shadow);
+        }
+        .v-control-btn {
+            flex: 1; padding: 10px;
+            background: var(--surface-color);
+            border: none; border-radius: 12px;
+            color: #e2e8f0; font-size: 10px; font-weight: bold;
+            cursor: pointer; box-shadow: var(--button-shadow);
+            text-transform: uppercase; text-align: center;
+        }
+        .v-control-btn:active { box-shadow: var(--button-active); }
+        .v-control-btn.active-mode { background: var(--accent-color); color: white; }
+
+        .upload-section { width: 100%; margin-bottom: 15px; display: flex; gap: 12px; align-items: center; }
+        .custom-file-input { flex: 1; height: 46px; background: var(--surface-color); border-radius: 20px; box-shadow: var(--button-shadow); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 11px; font-weight: 700; color: #e2e8f0; text-transform: uppercase; }
+        .custom-file-input input[type="file"] { display: none; }
+
+        .clear-btn-icon { width: 46px; height: 46px; border-radius: 50%; background: var(--surface-color); border: none; box-shadow: var(--button-shadow); display: flex; justify-content: center; align-items: center; cursor: pointer; color: #ff4d4d; }
+        .clear-btn-icon:active { box-shadow: var(--button-active); }
+        .clear-btn-icon svg { width: 18px; height: 18px; fill: currentColor; }
+
+        .track-list { width: 100%; height: 145px; overflow-y: auto; margin-bottom: 15px; }
+        .list-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 18px; border-radius: 24px; margin-bottom: 12px; cursor: pointer; background: var(--surface-color); box-shadow: var(--button-shadow); position: relative; }
+        .list-item.active { box-shadow: var(--inner-shadow); background: #141518; border-left: 3px solid var(--accent-color); }
+        
+        .item-details { display: flex; flex-direction: column; max-width: 80%; overflow: hidden; }
+        .item-title { font-size: 13px; font-weight: 600; color: #e2e8f0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .item-type { font-size: 11px; color: var(--font-light); margin-top: 3px; }
+
+        .settings-panel { width: 100%; height: 350px; overflow-y: auto; padding-right: 5px; }
+        .settings-panel::-webkit-scrollbar { width: 4px; }
+        .settings-panel::-webkit-scrollbar-thumb { background: #2a2d32; border-radius: 10px; }
+
+        .settings-group { background: #111215; padding: 15px; border-radius: 20px; box-shadow: var(--inner-shadow); margin-bottom: 15px; }
+        .settings-group-title { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--font-light); margin-bottom: 15px; text-align: center; }
+
+        .ambient-toggle-wrapper { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .toggle-label { font-size: 11px; font-weight: 700; color: #e2e8f0; }
+        
+        .switch-btn { width: 55px; height: 26px; border-radius: 20px; background: var(--surface-color); box-shadow: var(--button-shadow); position: relative; cursor: pointer; }
+        .switch-btn::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: var(--font-light); top: 4px; left: 5px; transition: all 0.3s; }
+        .switch-btn.active { background: #111215; box-shadow: var(--inner-shadow); }
+        .switch-btn.active::after { left: 32px; background: var(--accent-color); }
+
+        .slider-group { margin-bottom: 14px; width: 100%; }
+        .slider-label { display: flex; justify-content: space-between; font-size: 11px; color: var(--font-light); margin-bottom: 6px; font-weight: 500; }
+        .native-slider { width: 100%; -webkit-appearance: none; background: #1a1c20; height: 6px; border-radius: 5px; outline: none; }
+        .native-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--surface-color); box-shadow: var(--button-shadow); cursor: pointer; border: 2px solid var(--font-light); }
+
+        .color-picker-wrapper { display: flex; align-items: center; justify-content: space-between; }
+        .color-input { -webkit-appearance: none; border: none; width: 45px; height: 25px; border-radius: 6px; cursor: pointer; background: none; }
+        .color-input::-webkit-color-swatch { border: none; border-radius: 6px; box-shadow: var(--button-shadow); }
+    </style>
+</head>
+<body class="ambient-on">
+
+<div class="app-container">
+
+    <div class="player-card" id="main-card">
+        <div class="header-nav">
+            <button class="nav-btn">
+                <svg viewBox="0 0 24 24" style="width:18px; height:18px; fill:currentColor;"><path d="M20,11V13H8L13.5,18.5L12.08,19.92L4.16,12L12.08,4.08L13.5,5.5L8,11H20Z"/></svg>
+            </button>
+            <div class="header-title">Trenutno svira</div>
+            <button class="nav-btn" id="btn-open-videos">
+                <svg viewBox="0 0 24 24" style="width:18px; height:18px; fill:currentColor;"><path d="M3,6H21V8H3V6M3,11H21V13H3V11M3,16H21V18H3V16Z"/></svg>
+            </button>
+        </div>
+
+        <div class="video-overlay-panel" id="video-panel">
+            <div class="header-nav">
+                <div class="header-title">Video Biblioteka</div>
+                <button class="nav-btn" id="btn-close-videos" style="color: var(--accent-color); font-weight: bold;">X</button>
+            </div>
+            <label class="custom-file-input" style="margin-bottom: 10px;">
+                📹 + Učitaj Video Snimke
+                <input type="file" id="video-upload" multiple accept="video/*">
+            </label>
+            <div class="track-list" id="video-list-container" style="height: 280px;"></div>
+            <div class="video-controls-box">
+                <button class="v-control-btn" id="vc-play">Play</button>
+                <button class="v-control-btn" id="vc-stop">Stop</button>
+                <button class="v-control-btn" id="vc-next">Napred</button>
+                <button class="v-control-btn" id="vc-rep-one">Ponavljaj 1</button>
+                <button class="v-control-btn" id="vc-rep-all">Ponavljaj Sve</button>
+            </div>
+        </div>
+
+        <div class="album-art-wrapper" id="album-wrapper">
+            <div class="album-art">
+                <div class="album-art-fallback" id="fallback-art">
+                    <svg viewBox="0 0 24 24" style="width:45px; height:45px; color:var(--font-light);"><path d="M12,2A10,10 0 0,0 2,12A10,10 0 0,0 12,22A10,10 0 0,0 22,12A10,10 0 0,0 12,22M12,4A8,8 0 0,1 20,12A8,8 0 0,1 12,20A8,8 0 0,1 4,12A8,8 0 0,1 12,4M12.5,7A2.5,2.5 0 0,0 10,9.5V14.5A2.5,2.5 0 0,0 12.5,17A2.5,2.5 0 0,0 15,14.5V9.5A2.5,2.5 0 0,0 12.5,7Z"/></svg>
+                </div>
+                <video class="album-video" id="player-video" loop playsinline webkit-playsinline></video>
+            </div>
+        </div>
+
+        <div class="track-info">
+            <div class="track-title" id="display-title">Lista pesama je prazna</div>
+            <div class="track-artist" id="display-artist">Učitaj pesme u desnoj kartici</div>
+        </div>
+
+        <div class="progress-container">
+            <div class="time-stamps">
+                <span id="current-time">0:00</span>
+                <span id="duration-time">0:00</span>
+            </div>
+            <div class="slider-wrapper" id="slider-box">
+                <div class="progress-bar" id="progress-bar"><div class="progress-handle"></div></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button class="control-btn" id="btn-prev"><svg viewBox="0 0 24 24" style="width:16px; height:16px; fill:currentColor;"><path d="M6,18V6H8V18H6M9.5,12L18,6V18L9.5,12Z"/></svg></button>
+            <button class="control-btn play-main" id="btn-play">
+                <svg viewBox="0 0 24 24" id="play-icon" style="width:22px; height:22px; fill:currentColor;"><path d="M8,5.14V19.14L19,12.14L8,5.14Z"/></svg>
+            </button>
+            <button class="control-btn" id="btn-next"><svg viewBox="0 0 24 24" style="width:16px; height:16px; fill:currentColor;"><path d="M16,18H18V6H16M6,18L14.5,12L6,6V18Z"/></svg></button>
+        </div>
+    </div>
+
+    <div class="player-card">
+        <div class="header-nav">
+            <div class="header-title" style="margin-left: auto; margin-right: auto;">Muzička Biblioteka</div>
+        </div>
+
+        <div class="upload-section">
+            <label class="custom-file-input">🎵 + UČITAJ PESME<input type="file" id="audio-upload" multiple accept="audio/*"></label>
+            <button class="clear-btn-icon" id="btn-clear-playlist" title="Očisti listu">
+                <svg viewBox="0 0 24 24"><path d="M9,3V4H4V6H5V19A2,2 0 0,0 7,21H17A2,2 0 0,0 19,19V6H20V4H15V3H9M7,6H17V19H7V6M9,8V17H11V8H9M13,8V17H15V8H13Z"/></svg>
+            </button>
+        </div>
+
+        <div class="track-list" id="playlist-container"></div>
+
+        <div class="settings-panel">
+            <div class="settings-group">
+                <div class="settings-group-title">Osnovna Podešavanja</div>
+                <div class="ambient-toggle-wrapper">
+                    <span class="toggle-label">AMBIJENTALNO SVETLO (ON/OFF)</span>
+                    <div class="switch-btn active" id="ambient-switch"></div>
+                </div>
+                <div class="slider-group">
+                    <div class="slider-label"><span style="color:#fff; font-weight:700;">Veličina Ambilight svetla</span><span id="val-ambilight" style="color:var(--accent-color); font-weight:bold;">20%</span></div>
+                    <input type="range" id="slide-ambilight" class="native-slider" min="0" max="45" value="20">
+                </div>
+                <div class="color-picker-wrapper">
+                    <span style="font-size: 11px; font-weight:700; color:#e2e8f0;">Promena RGB Boje Akcenta:</span>
+                    <input type="color" id="rgb-color" class="color-input" value="#ff2a2a">
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <div class="settings-group-title">Kontrola Sjaja Dugmeta</div>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Jačina crvenog sjaja</span><span id="val-glow">0.4</span></div>
+                    <input type="range" id="slide-glow" class="native-slider" min="0" max="1" step="0.1" value="0.4">
+                </div>
+            </div>
+
+            <div class="settings-group">
+                <div class="settings-group-title">3D Parametri Senki</div>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Visina senki</span><span id="val-size">9px</span></div>
+                    <input type="range" id="slide-size" class="native-slider" min="1" max="20" value="9">
+                </div>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Širina / Blur senki</span><span id="val-blur">16px</span></div>
+                    <input type="range" id="slide-blur" class="native-slider" min="2" max="35" value="16">
+                </div>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Dubina ureza (Inset)</span><span id="val-inset">3px</span></div>
+                    <input type="range" id="slide-inset" class="native-slider" min="1" max="10" value="3">
+                </div>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Oštrina Tamne Senke</span><span id="val-dark">1.0</span></div>
+                    <input type="range" id="slide-dark" class="native-slider" min="0" max="1" step="0.1" value="1">
+                </div>
+                <div class="slider-group">
+                    <div class="slider-label"><span>Oštrina Svetle Senke</span><span id="val-light">0.15</span></div>
+                    <input type="range" id="slide-light" class="native-slider" min="0" max="1" step="0.05" value="0.15">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<audio id="audio-engine"></audio>
+
+<script>
+    let db;
+    let audioPlaylist = [];
+    let videoPlaylist = [];
+    let audioIndex = 0;
+    let videoIndex = 0;
+    let isPlayingAudio = false;
+    let videoRepeatMode = 'all';
+
+    const audio = document.getElementById('audio-engine');
+    const video = document.getElementById('player-video');
+    const fallbackArt = document.getElementById('fallback-art');
+    const albumWrapper = document.getElementById('album-wrapper');
+    const videoPanel = document.getElementById('video-panel');
+    const btnOpenVideos = document.getElementById('btn-open-videos');
+    const btnCloseVideos = document.getElementById('btn-close-videos');
+    const videoUpload = document.getElementById('video-upload');
+    const videoListContainer = document.getElementById('video-list-container');
+    const audioUpload = document.getElementById('audio-upload');
+    const playlistContainer = document.getElementById('playlist-container');
+    const displayTitle = document.getElementById('display-title');
+    const displayArtist = document.getElementById('display-artist');
+    const btnPlay = document.getElementById('btn-play');
+    const playIcon = document.getElementById('play-icon');
+    const progressBar = document.getElementById('progress-bar');
+    const sliderBox = document.getElementById('slider-box');
+    const currentTimeEl = document.getElementById('current-time');
+    const durationTimeEl = document.getElementById('duration-time');
+
+    const playPath = "M8,5.14V19.14L19,12.14L8,5.14Z";
+    const pausePath = "M14,19H18V5H14M6,19H10V5H6V19Z";
+
+    // INICIJALIZACIJA INDEXEDDB LOKALNE BAZE PODATAKA
+    const request = indexedDB.open("3DPlayerLocalDB", 1);
+    request.onupgradeneeded = (e) => {
+        db = e.target.result;
+        if (!db.objectStoreNames.contains("audio")) db.createObjectStore("audio", { keyPath: "id", autoIncrement: true });
+        if (!db.objectStoreNames.contains("video")) db.createObjectStore("video", { keyPath: "id", autoIncrement: true });
+    };
+    request.onsuccess = (e) => {
+        db = e.target.result;
+        loadStoredMedia();
+    };
+
+    btnOpenVideos.addEventListener('click', () => videoPanel.classList.add('open'));
+    btnCloseVideos.addEventListener('click', () => videoPanel.classList.remove('open'));
+
+    // ČUVANJE AUDIO FAJLOVA U LOKALNU BAZU
+    audioUpload.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        let processed = 0;
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const transaction = db.transaction(["audio"], "readwrite");
+                const store = transaction.objectStore("audio");
+                const trackData = {
+                    title: file.name.replace(/\.[^/.]+$/, ""),
+                    artist: "Lokalna pesma",
+                    blob: new Blob([event.target.result], { type: file.type })
+                };
+                store.add(trackData);
+                
+                transaction.oncomplete = () => {
+                    processed++;
+                    if (processed === files.length) {
+                        loadStoredMedia();
+                    }
+                };
+            };
+            reader.readAsArrayBuffer(file);
+        });
+        audioUpload.value = '';
+    });
+
+    // ČUVANJE VIDEO FAJLOVA U LOKALNU BAZU
+    videoUpload.addEventListener('change', (e) => {
+        const files = Array.from(e.target.files);
+        let processed = 0;
+        files.forEach(file => {
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const transaction = db.transaction(["video"], "readwrite");
+                const store = transaction.objectStore("video");
+                const videoData = {
+                    title: file.name.replace(/\.[^/.]+$/, ""),
+                    blob: new Blob([event.target.result], { type: file.type })
+                };
+                store.add(videoData);
+
+                transaction.oncomplete = () => {
+                    processed++;
+                    if (processed === files.length) {
+                        loadStoredMedia();
+                    }
+                };
+            };
+            reader.readAsArrayBuffer(file);
+        });
+        videoUpload.value = '';
+    });
+
+    // UČITAVANJE SVEGA IZ LOKALNE MEMORIJE NAKON RESTARTA
+    function loadStoredMedia() {
+        // Učitaj audio
+        const audioTx = db.transaction(["audio"], "readonly");
+        const audioStore = audioTx.objectStore("audio");
+        const getAllAudio = audioStore.getAll();
+        
+        getAllAudio.onsuccess = () => {
+            audioPlaylist = getAllAudio.result.map(item => ({
+                title: item.title,
+                artist: item.artist,
+                url: URL.createObjectURL(item.blob)
+            }));
+            renderAudioPlaylist();
+            if(audioPlaylist.length > 0 && audio.src === '') loadAudioTrack(0, false);
+        };
+
+        // Učitaj video
+        const videoTx = db.transaction(["video"], "readonly");
+        const videoStore = videoTx.objectStore("video");
+        const getAllVideo = videoStore.getAll();
+
+        getAllVideo.onsuccess = () => {
+            videoPlaylist = getAllVideo.result.map(item => ({
+                title: item.title,
+                url: URL.createObjectURL(item.blob)
+            }));
+            renderVideoPlaylist();
+            if(videoPlaylist.length > 0 && video.src === '') loadVideoTrack(0);
+        };
+    }
+
+    function loadAudioTrack(index, autoPlay = true) {
+        if (!audioPlaylist[index]) return;
+        audioIndex = index;
+        audio.src = audioPlaylist[audioIndex].url;
+        displayTitle.innerText = audioPlaylist[audioIndex].title;
+        displayArtist.innerText = audioPlaylist[audioIndex].artist;
+        audio.ontimeupdate = updateAudioProgress;
+        if (isPlayingAudio && autoPlay) {
+            audio.play().catch(()=>{});
+            if(video.src) { video.muted = true; video.play().catch(()=>{}); }
+        }
+        renderAudioPlaylist();
+    }
+
+    function loadVideoTrack(index) {
+        if (!videoPlaylist[index]) return;
+        videoIndex = index;
+        video.src = videoPlaylist[videoIndex].url;
+        video.style.display = 'block';
+        fallbackArt.style.display = 'none';
+        if (isPlayingAudio) {
+            video.muted = true;
+            video.play().catch(()=>{});
+        }
+        renderVideoPlaylist();
+    }
+
+    function toggleAudio() {
+        if (audioPlaylist.length === 0) return;
+        if (isPlayingAudio) {
+            isPlayingAudio = false;
+            playIcon.setAttribute('d', playPath);
+            audio.pause();
+            if (video.src) { video.muted = false; video.play().catch(()=>{}); }
+            albumWrapper.classList.remove('playing-glow');
+        } else {
+            isPlayingAudio = true;
+            playIcon.setAttribute('d', pausePath);
+            audio.play().catch(()=>{});
+            if (video.src) { video.muted = true; video.play().catch(()=>{}); }
+            albumWrapper.classList.add('playing-glow');
+        }
+    }
+
+    btnPlay.addEventListener('click', toggleAudio);
+    albumWrapper.addEventListener('click', toggleAudio);
+
+    document.getElementById('vc-play').addEventListener('click', () => { if (video.src) video.play().catch(()=>{}); });
+    document.getElementById('vc-stop').addEventListener('click', () => { if (video.src) { video.pause(); video.currentTime = 0; } });
+    document.getElementById('vc-next').addEventListener('click', () => {
+        if (videoPlaylist.length === 0) return;
+        videoIndex = (videoIndex + 1) % videoPlaylist.length;
+        loadVideoTrack(videoIndex);
+    });
+    
+    const btnRepOne = document.getElementById('vc-rep-one');
+    const btnRepAll = document.getElementById('vc-rep-all');
+    btnRepOne.addEventListener('click', () => { videoRepeatMode = 'one'; btnRepOne.classList.add('active-mode'); btnRepAll.classList.remove('active-mode'); });
+    btnRepAll.addEventListener('click', () => { videoRepeatMode = 'all'; btnRepAll.classList.add('active-mode'); btnRepOne.classList.remove('active-mode'); });
+
+    audio.addEventListener('ended', () => {
+        if (audioPlaylist.length === 0) return;
+        audioIndex = (audioIndex + 1) % audioPlaylist.length;
+        loadAudioTrack(audioIndex);
+    });
+
+    video.addEventListener('ended', () => {
+        if (videoPlaylist.length === 0) return;
+        if (videoRepeatMode === 'one') { video.currentTime = 0; video.play().catch(()=>{}); }
+        else if (videoRepeatMode === 'all') { videoIndex = (videoIndex + 1) % videoPlaylist.length; loadVideoTrack(videoIndex); }
+    });
+
+    function updateAudioProgress() {
+        if (audio.duration) {
+            progressBar.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
+            currentTimeEl.innerText = formatTime(audio.currentTime);
+            durationTimeEl.innerText = formatTime(audio.duration);
+        }
+    }
+
+    sliderBox.addEventListener('click', (e) => {
+        if (audio.duration) audio.currentTime = (e.offsetX / sliderBox.clientWidth) * audio.duration;
+    });
+
+    function formatTime(s) {
+        const m = Math.floor(s / 60); const sec = Math.floor(s % 60);
+        return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+    }
+
+    function renderAudioPlaylist() {
+        playlistContainer.innerHTML = '';
+        audioPlaylist.forEach((track, index) => {
+            const row = document.createElement('div');
+            row.className = `list-item ${index === audioIndex ? 'active' : ''}`;
+            row.innerHTML = `<div class="item-details"><span class="item-title">${track.title}</span><span class="item-type">🎵 Audio</span></div>`;
+            row.addEventListener('click', () => loadAudioTrack(index));
+            playlistContainer.appendChild(row);
+        });
+    }
+
+    function renderVideoPlaylist() {
+        videoListContainer.innerHTML = '';
+        videoPlaylist.forEach((track, index) => {
+            const row = document.createElement('div');
+            row.className = `list-item ${index === videoIndex ? 'active' : ''}`;
+            row.innerHTML = `<div class="item-details"><span class="item-title" style="color:#ff2a2a">${track.title}</span><span class="item-type">📹 Video</span></div>`;
+            row.addEventListener('click', () => loadVideoTrack(index));
+            videoListContainer.appendChild(row);
+        });
+    }
+
+    // BRISANJE SVEGA IZ LOKALNE BAZE PODATAKA
+    document.getElementById('btn-clear-playlist').addEventListener('click', () => {
+        audio.pause(); audio.src = ''; video.pause(); video.src = '';
+        video.style.display = 'none'; fallbackArt.style.display = 'flex';
+        
+        const tx1 = db.transaction(["audio"], "readwrite"); tx1.objectStore("audio").clear();
+        const tx2 = db.transaction(["video"], "readwrite"); tx2.objectStore("video").clear();
+        
+        audioPlaylist = []; videoPlaylist = [];
+        renderAudioPlaylist(); renderVideoPlaylist();
+        displayTitle.innerText = "Lista pesama je prazna";
+    });
+
+    const ambientSwitch = document.getElementById('ambient-switch');
+    ambientSwitch.addEventListener('click', () => {
+        const isOn = ambientSwitch.classList.toggle('active');
+        if (isOn) document.body.classList.add('ambient-on'); else document.body.classList.remove('ambient-on');
+    });
+
+    const root = document.documentElement;
+
+    document.getElementById('slide-ambilight').addEventListener('input', (e) => {
+        root.style.setProperty('--ambilight-size', e.target.value + '%');
+        document.getElementById('val-ambilight').innerText = e.target.value + '%';
+    });
+
+    document.getElementById('rgb-color').addEventListener('input', (e) => {
+        const hex = e.target.value;
+        root.style.setProperty('--accent-color', hex);
+        const r = parseInt(hex.slice(1,3), 16);
+        const g = parseInt(hex.slice(3,5), 16);
+        const b = parseInt(hex.slice(5,7), 16);
+        root.style.setProperty('--accent-blur', `rgba(${r}, ${g}, ${b}, 0.35)`);
+    });
+
+    document.getElementById('slide-glow').addEventListener('input', (e) => {
+        root.style.setProperty('--button-glow-opacity', e.target.value);
+        document.getElementById('val-glow').innerText = e.target.value;
+    });
+
+    document.getElementById('slide-size').addEventListener('input', (e) => {
+        root.style.setProperty('--shadow-size', e.target.value + 'px');
+        document.getElementById('val-size').innerText = e.target.value + 'px';
+    });
+
+    document.getElementById('slide-blur').addEventListener('input', (e) => {
+        root.style.setProperty('--shadow-blur', e.target.value + 'px');
+        document.getElementById('val-blur').innerText = e.target.value + 'px';
+    });
+
+    document.getElementById('slide-inset').addEventListener('input', (e) => {
+        root.style.setProperty('--shadow-inset-intensity', e.target.value + 'px');
+        document.getElementById('val-inset').innerText = e.target.value + 'px';
+    });
+
+    document.getElementById('slide-dark').addEventListener('input', (e) => {
+        root.style.setProperty('--shadow-dark-opacity', e.target.value);
+        document.getElementById('val-dark').innerText = e.target.value;
+    });
+
+    document.getElementById('slide-light').addEventListener('input', (e) => {
+        root.style.setProperty('--shadow-light-opacity', e.target.value);
+        document.getElementById('val-light').innerText = e.target.value;
+    });
+</script>
+</body>
+</html>
